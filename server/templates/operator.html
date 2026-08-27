@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% block title %}Panel operatora | Snipe Bridge{% endblock %}
+{% block content %}
+<section class="hero-row">
+  <div>
+    <p class="eyebrow">Panel operatora</p>
+    <h1>Wydanie lub zwrot sprzętu</h1>
+    <p class="lede">Najpierw połącz terminal kodem QR. Potem wybierz operację, tryb i odbiorcę. Aktywny terminal możesz przełączać bez ponownego parowania.</p>
+  </div>
+  <div class="status-card">
+    <span class="status-dot"></span>
+    <div><strong>Snipe-IT</strong><small>{{ base_url }}</small></div>
+    <div class="status-actions">
+      <form method="post" action="{{ url_for('operator_test') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="secondary-button compact" type="submit">Test połączenia</button>
+      </form>
+      <a class="secondary-button compact snipe-button" href="{{ base_url }}/" target="_blank" rel="noopener">Przejdź do Snipe-IT</a>
+    </div>
+  </div>
+</section>
+
+<section class="card code-card{% if using_active_terminal %} active-terminal-card{% else %} pairing-code-card{% endif %}">
+  {% if using_active_terminal %}
+    <div class="code-copy">
+      <p class="step">Krok 1</p>
+      <h2>Terminal jest już połączony</h2>
+      <p class="active-terminal-id">ID: <span>{{ active_terminal.terminal_id }}</span></p>
+    </div>
+    <div class="active-pairing-actions">
+      <form method="post" action="{{ url_for('operator_create_pair_request') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="primary-button active-qr-button" type="submit">Połącz inny terminal kodem QR</button>
+      </form>
+      <details class="fallback-pairing active-fallback">
+        <summary>Połącz kodem ręcznym</summary>
+        <form method="post" action="{{ url_for('operator_pair_code_setup') }}" class="code-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label for="pair_code">Sześciocyfrowy kod widoczny na terminalu</label>
+          <input class="pair-input" id="pair_code" name="pair_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required>
+          <button class="secondary-button" type="submit">Sprawdź kod</button>
+        </form>
+      </details>
+    </div>
+  {% else %}
+    <div class="pairing-copy-column">
+      <div class="code-copy">
+        <p class="step">Krok 1</p>
+        <h2>{% if replacement_pending %}Połącz inny terminal{% else %}Połącz terminal{% endif %}</h2>
+        {% if replacement_pending %}
+          <p class="step-description">Zeskanuj QR nowym terminalem. Dotychczasowy terminal pozostaje aktywny, dopóki nowe parowanie nie zakończy się poprawnie.</p>
+        {% else %}
+          <p class="step-description">Zeskanuj widoczny kod QR terminalem. Po udanym parowaniu wybierzesz operację, tryb oraz odbiorcę.</p>
+        {% endif %}
+      </div>
+      <details class="fallback-pairing">
+        <summary>Wpisz kod ręcznie</summary>
+        <form method="post" action="{{ url_for('operator_pair_code_setup') }}" class="code-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label for="pair_code">Sześciocyfrowy kod widoczny na terminalu</label>
+          <input class="pair-input" id="pair_code" name="pair_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required>
+          <button class="secondary-button" type="submit">Sprawdź kod</button>
+        </form>
+      </details>
+      <div class="inline-status inline-status-qr">{% if replacement_pending %}Oczekiwanie na nowy terminal. Obecna sesja nie została przerwana.{% else %}Połącz terminal, aby odblokować wybór operacji.{% endif %}</div>
+      {% if replacement_pending %}
+        <form method="post" action="{{ url_for('operator_pairing_qr_cancel') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="secondary-button compact" type="submit">Anuluj zmianę terminala</button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="inline-qr-card">
+      <img src="{{ url_for('operator_pairing_qr_image', token=pairing_token) }}" width="192" height="192" alt="Jednorazowy kod QR parowania terminala">
+      <strong>Zeskanuj QR terminalem</strong>
+      <small>Kod jest jednorazowy. Wygaśnie za <span id="qr-countdown">{{ pairing_expires_in }}</span> s.</small>
+    </div>
+  {% endif %}
+</section>
+
+{% if using_active_terminal %}
+<section class="operation-section">
+  <div class="section-heading">
+    <div>
+      <p class="step">Krok 2</p>
+      <h2>Wybierz operację</h2>
+      <p class="step-description">Wybierz wydanie albo zwrot oraz zdecyduj, czy pracujesz pojedynczo, czy na liście urządzeń.</p>
+    </div>
+  </div>
+  <div class="operation-grid">
+    <a class="operation-choice checkout-choice{% if mode == 'checkout' and not batch_mode %} active{% endif %}" href="{{ url_for('operator_panel', mode='checkout', batch='0') }}#step-3">
+      <span class="operation-icon">→</span>
+      <span><strong>Wydanie pojedyncze</strong><small>Wybierz odbiorcę i wydawaj po jednym urządzeniu.</small></span>
+    </a>
+    <a class="operation-choice checkout-choice{% if mode == 'checkout' and batch_mode %} active{% endif %}" href="{{ url_for('operator_panel', mode='checkout', batch='1') }}#step-3">
+      <span class="operation-icon operation-icon-multi" aria-hidden="true">
+        <span class="operation-arrow-row">→</span>
+        <span class="operation-arrow-row">→</span>
+      </span>
+      <span><strong>Masowe wydanie</strong><small>Zeskanuj listę urządzeń i zatwierdź ją jedną akcją.</small></span>
+    </a>
+    <a class="operation-choice checkin-choice{% if mode == 'checkin' and not batch_mode %} active{% endif %}" href="{{ url_for('operator_panel', mode='checkin', batch='0') }}#step-3">
+      <span class="operation-icon">←</span>
+      <span><strong>Zwrot pojedynczy</strong><small>Zwracam sprzęt pojedynczo do magazynu.</small></span>
+    </a>
+    <a class="operation-choice checkin-choice{% if mode == 'checkin' and batch_mode %} active{% endif %}" href="{{ url_for('operator_panel', mode='checkin', batch='1') }}#step-3">
+      <span class="operation-icon operation-icon-multi" aria-hidden="true">
+        <span class="operation-arrow-row">←</span>
+        <span class="operation-arrow-row">←</span>
+      </span>
+      <span><strong>Masowy zwrot</strong><small>Zeskanuj wiele urządzeń i przyjmij całą listę.</small></span>
+    </a>
+  </div>
+</section>
+
+{% if mode == 'checkout' %}
+  <section class="card flow-card checkout-flow" id="step-3">
+    <div class="flow-copy">
+      <div class="section-heading flow-heading">
+        <div>
+          <p class="step">Krok 3</p>
+          <h2>Wybierz odbiorcę</h2>
+          <p class="step-description">Wskaż nazwisko lub adres e-mail osoby, której wypożyczasz sprzęt.</p>
+        </div>
+        <span class="mode-pill">{% if batch_mode %}Masowe wydanie{% else %}Wydanie{% endif %}</span>
+      </div>
+      <form method="get" action="{{ url_for('operator_panel') }}#step-3" class="search-form">
+        <input type="hidden" name="mode" value="checkout">
+        <input type="hidden" name="batch" value="{% if batch_mode %}1{% else %}0{% endif %}">
+        <label for="q">Nazwisko, e-mail lub login</label>
+        <div class="search-row">
+          <input id="q" name="q" value="{{ query }}" placeholder="np. jan.kowalski" required autofocus>
+          <button class="primary-button" type="submit">Szukaj</button>
+        </div>
+      </form>
+    </div>
+    <div class="recipient-results">
+      <div class="results-head">
+        <div>
+          <p class="step">Użytkownicy Snipe-IT</p>
+          <h2>{% if query %}Wybierz właściwą osobę{% else %}Wyszukaj odbiorcę{% endif %}</h2>
+        </div>
+      </div>
+      {% if users %}
+        <div class="user-list">
+          {% for user in users %}
+            <form method="post" action="{{ url_for('operator_reconfigure') }}" class="user-row">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="terminal_id" value="{{ active_terminal.terminal_id }}">
+              <input type="hidden" name="operation" value="checkout">
+              <input type="hidden" name="batch_mode" value="{% if batch_mode %}1{% else %}0{% endif %}">
+              <input type="hidden" name="user_id" value="{{ user.id }}">
+              <span class="avatar">{{ user_display_name(user)[:1] | upper }}</span>
+              <span class="user-main">
+                <strong>{{ user_display_name(user) }}</strong>
+                <small>{{ user.email or user.username or 'Brak adresu e-mail' }}</small>
+              </span>
+              <span class="user-meta">ID {{ user.id }}</span>
+              <button class="primary-button compact" type="submit">Wybierz i rozpocznij</button>
+            </form>
+          {% endfor %}
+        </div>
+      {% elif query %}
+        <div class="empty-state compact-empty">Brak użytkowników pasujących do „{{ query }}”.</div>
+      {% else %}
+        <div class="empty-state compact-empty">Lista pojawi się po wyszukaniu nazwiska lub adresu e-mail.</div>
+      {% endif %}
+    </div>
+  </section>
+{% elif mode == 'checkin' %}
+  <section class="card flow-card return-flow" id="step-3">
+    <div class="flow-copy">
+      <div class="section-heading flow-heading">
+        <div>
+          <p class="step">Krok 3</p>
+          <h2>Ustaw sposób przyjęcia</h2>
+          <p class="step-description">Nie wybierasz osoby. Po skanie terminal pokaże, komu sprzęt jest obecnie przypisany.</p>
+        </div>
+        <span class="mode-pill return-mode">{% if batch_mode %}Masowy zwrot{% else %}Zwrot{% endif %}</span>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('operator_reconfigure') }}" class="return-setup-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="terminal_id" value="{{ active_terminal.terminal_id }}">
+      <input type="hidden" name="operation" value="checkin">
+      <input type="hidden" name="batch_mode" value="{% if batch_mode %}1{% else %}0{% endif %}">
+      <label for="return_choice">Status po przyjęciu</label>
+      <select id="return_choice" name="return_choice">
+        <option value="ready" selected>Gotowy do wydania</option>
+        <option value="service">Oczekujące · Wymaga serwisu</option>
+      </select>
+      <p class="field-help">Zwrot jest możliwy tylko dla przypisanego sprzętu ze statusem „Wydane” albo „Gotowy do wydania” i meta statusem „Przypisany”.</p>
+      <button class="primary-button" type="submit">Rozpocznij zwrot</button>
+    </form>
+  </section>
+{% else %}
+  <section class="card choice-hint" id="step-3">
+    <p>Wybierz powyżej wydanie pojedyncze, masowe wydanie, zwrot pojedynczy albo masowy zwrot.</p>
+  </section>
+{% endif %}
+{% else %}
+  <section class="card locked-step">
+    <div>
+      <p class="step">Krok 2</p>
+      <h2>Wybierz operację</h2>
+      <p class="step-description">Najpierw połącz terminal. Po zeskanowaniu QR lub wpisaniu kodu odblokujemy wybór operacji i odbiorcy.</p>
+    </div>
+  </section>
+{% endif %}
+
+{% if not using_active_terminal %}
+<script>
+(function () {
+  var remaining = {{ pairing_expires_in }};
+  var countdown = document.getElementById('qr-countdown');
+
+  function updateCountdown() {
+    if (remaining > 0) { remaining -= 1; }
+    if (countdown) { countdown.textContent = remaining; }
+  }
+
+  function pollPairing() {
+    fetch('{{ url_for('operator_pairing_qr_status') }}', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    }).then(function (response) {
+      return response.json();
+    }).then(function (body) {
+      if (body.status === 'paired') {
+        window.location.replace('{{ url_for('operator_panel') }}');
+        return;
+      }
+      if (body.status === 'expired' || body.status === 'missing') {
+        window.location.replace('{{ url_for('operator_panel') }}');
+        return;
+      }
+      if (typeof body.expires_in === 'number') {
+        remaining = body.expires_in;
+      }
+      window.setTimeout(pollPairing, 1500);
+    }).catch(function () {
+      window.setTimeout(pollPairing, 2500);
+    });
+  }
+
+  window.setInterval(updateCountdown, 1000);
+  window.setTimeout(pollPairing, 800);
+}());
+</script>
+{% else %}
+<script>
+(function () {
+  var expectedTerminalId = '{{ active_terminal.terminal_id }}';
+  function pollActiveTerminal() {
+    fetch('{{ url_for('operator_active_terminal_status') }}', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    }).then(function (response) {
+      return response.json();
+    }).then(function (body) {
+      if (body.status === 'ended') {
+        window.location.replace('{{ url_for('operator_panel') }}');
+        return;
+      }
+      if (body.terminal_id && body.terminal_id !== expectedTerminalId) {
+        window.location.replace('{{ url_for('operator_panel') }}');
+        return;
+      }
+      window.setTimeout(pollActiveTerminal, 1500);
+    }).catch(function () {
+      window.setTimeout(pollActiveTerminal, 2500);
+    });
+  }
+
+  window.setTimeout(pollActiveTerminal, 1000);
+}());
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Zeskanuj QR | Snipe Bridge{% endblock %}
+{% block content %}
+<section class="qr-pair-shell">
+  <div class="qr-pair-copy">
+    <p class="eyebrow">Parowanie terminala</p>
+    <h1>Zeskanuj ten QR terminalem</h1>
+    <p class="lede">Na MC319Z otwórz ekran parowania i użyj przycisku skanowania. Po poprawnym odczycie wrócisz do panelu, aby wybrać operację i odbiorcę.</p>
+
+    <div class="qr-operation-summary">
+      <span class="mode-pill">Parowanie</span>
+      <strong>Połącz terminal z panelem operatora</strong>
+      <small>Ten QR nie zawiera operacji, odbiorcy ani danych logowania.</small>
+    </div>
+
+    <div id="pairing-status" class="inline-status inline-status-qr">Oczekiwanie na terminal…</div>
+    <p class="qr-expiry">Kod wygaśnie za <strong id="qr-countdown">{{ expires_in }}</strong> s i może zostać użyty tylko raz.</p>
+    <form method="post" action="{{ url_for('operator_pairing_qr_cancel') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="secondary-button" type="submit">Anuluj parowanie</button>
+    </form>
+  </div>
+  <div class="card qr-code-card">
+    <img src="{{ url_for('operator_pairing_qr_image', token=token) }}" width="288" height="288" alt="Jednorazowy kod QR parowania terminala">
+    <strong>Zeskanuj z ekranu komputera</strong>
+  </div>
+</section>
+
+<script>
+(function () {
+  var remaining = {{ expires_in }};
+  var countdown = document.getElementById('qr-countdown');
+  var statusBox = document.getElementById('pairing-status');
+
+  function updateCountdown() {
+    if (remaining > 0) { remaining -= 1; }
+    countdown.textContent = remaining;
+  }
+
+  function pollStatus() {
+    fetch('{{ url_for('operator_pairing_qr_status') }}', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    }).then(function (response) {
+      return response.json();
+    }).then(function (body) {
+      if (body.status === 'paired') {
+        statusBox.className = 'inline-status inline-status-success';
+        statusBox.textContent = 'Terminal sparowany. Przechodzę do panelu…';
+        window.location.replace('{{ url_for('operator_panel') }}');
+        return;
+      }
+      if (body.status === 'expired' || body.status === 'missing') {
+        statusBox.className = 'inline-status inline-status-error';
+        statusBox.textContent = 'Kod wygasł. Wróć do panelu i przygotuj nowy.';
+        return;
+      }
+      if (typeof body.expires_in === 'number') {
+        remaining = body.expires_in;
+      }
+      window.setTimeout(pollStatus, 1500);
+    }).catch(function () {
+      window.setTimeout(pollStatus, 2500);
+    });
+  }
+
+  window.setInterval(updateCountdown, 1000);
+  window.setTimeout(pollStatus, 800);
+}());
+</script>
+{% endblock %}

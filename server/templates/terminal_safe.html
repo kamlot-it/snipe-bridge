@@ -1,0 +1,154 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="{{ app_language }}">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="MobileOptimized" content="320">
+  <meta name="HandheldFriendly" content="true">
+  <meta name="viewport" content="width=320, initial-scale=1.0">
+  <title>{{ app_name }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png', v='3') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='terminal_safe.css', v='77') }}">
+  <style type="text/css">
+    .safe-header { border-bottom-color: {{ primary_color }}; color: {{ primary_color }}; background-color: {{ header_color }}; }
+    .safe-orange { border-color: {{ primary_color }}; background-color: {{ primary_color }}; }
+    .safe-input, .safe-target { border-color: {{ primary_color }}; }
+    .safe-label, .safe-batch-heading { color: {{ primary_color }}; }
+    .safe-batch-heading { border-bottom-color: {{ primary_color }}; }
+    .safe-green { background-color: {{ accent_color }}; }
+    .safe-language-switch a.active { border-color: {{ primary_color }}; background-color: {{ primary_color }}; }
+  </style>
+</head>
+<body>
+  <table class="safe-header" cellspacing="0" cellpadding="0">
+    <tr><td class="safe-header-title"><b>{{ terminal_title|upper }}</b></td>{% if not terminal.is_paired %}<td class="safe-header-language"><div class="safe-language-switch"><a{% if app_language == 'pl' %} class="active"{% endif %} href="{{ url_for('set_language', language='pl', next=url_for('terminal', t=terminal_id)) }}">PL</a><a{% if app_language == 'en' %} class="active"{% endif %} href="{{ url_for('set_language', language='en', next=url_for('terminal', t=terminal_id)) }}">EN</a></div></td>{% endif %}</tr>
+  </table>
+
+  {% if terminal.is_paired and terminal.operation_mode != 'setup' and result and message %}
+    <div class="safe-message {{ result|e }}">{{ message }}{% if message_count %}<span class="message-count">{{ message_count }} szt.</span>{% endif %}</div>
+  {% endif %}
+
+  {% if not terminal.is_paired %}
+    <div class="safe-panel safe-center">
+      <div class="safe-label">ZESKANUJ QR PAROWANIA</div>
+      <form method="post" action="{{ url_for('terminal_pair_qr') }}?t={{ terminal_id }}&amp;field={{ scan_field_name }}" autocomplete="off">
+        <input id="{{ scan_field_name }}" class="safe-input" type="text" name="{{ scan_field_name }}" value="" size="18" maxlength="2048" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
+        <input class="safe-button safe-orange" type="submit" value="PARUJ">
+      </form>
+      {% if result and message %}<div class="safe-inline-message {{ result|e }}">{{ message }}</div>{% endif %}
+      <div class="safe-or">ALBO WPISZ KOD NA KOMPUTERZE</div>
+      <div class="safe-pair-code">{{ terminal.pair_code }}</div>
+      <div class="safe-terminal-id"><b>ID TERMINALA</b><span>{{ terminal_id }}</span></div>
+      <form class="safe-refresh-form" method="get" action="{{ url_for('terminal') }}">
+        <input type="hidden" name="t" value="{{ terminal_id }}">
+        <input class="safe-small-button" type="submit" value="ODŚWIEŻ PAROWANIE">
+      </form>
+    </div>
+  {% elif terminal.operation_mode == 'setup' %}
+    <div class="safe-panel">
+      <table class="safe-setup" cellspacing="0" cellpadding="0">
+        <tr>
+          <td class="safe-ok-cell"><b class="safe-ok">OK</b></td>
+          <td><b>TERMINAL SPAROWANY</b><span>Wybierz wydanie lub zwrot w panelu operatora.</span></td>
+        </tr>
+      </table>
+      <form class="safe-center" method="get" action="{{ url_for('terminal') }}">
+        <input type="hidden" name="t" value="{{ terminal_id }}">
+        <input class="safe-button safe-orange" type="submit" value="SPRAWDŹ WYBRANY TRYB">
+      </form>
+    </div>
+    <form class="safe-center" method="post" action="{{ url_for('terminal_unpair') }}?t={{ terminal_id }}">
+      <input class="safe-button safe-white" type="submit" value="ZAKOŃCZ SESJĘ">
+    </form>
+  {% elif pending %}
+    {% set asset = pending.asset %}
+    <div class="safe-target">
+      {% if terminal.operation_mode == 'checkin' %}
+        {% set assigned = asset.assigned_to %}
+        <div class="safe-label">AKTUALNIE PRZYPISANO</div>
+        <b>{{ assigned.name or assigned.username or assigned.email or assigned.id }}</b>
+        {% if assigned.email %}<span>{{ assigned.email }}</span>{% endif %}
+        <span>Po zwrocie: {{ asset._bridge_status_name }}</span>
+      {% else %}
+        <div class="safe-label">ODBIORCA</div>
+        <b>{{ terminal.target_name }}</b>
+      {% endif %}
+    </div>
+    <div class="safe-panel">
+      <div class="safe-label">POTWIERDŹ SPRZĘT</div>
+      {% if asset.category and asset.category.name %}
+        <div class="safe-category">{{ asset.category.name }}</div>
+      {% elif asset.model and asset.model.category and asset.model.category.name %}
+        <div class="safe-category">{{ asset.model.category.name }}</div>
+      {% endif %}
+      <div class="safe-model">{{ asset_model_label(asset) }}</div>
+      {% if asset.name %}<div class="safe-name">Nazwa: {{ asset.name }}</div>{% endif %}
+      <table class="safe-details" cellspacing="0" cellpadding="0">
+        <tr><td class="safe-key">Asset Tag</td><td><b>{{ asset.asset_tag or asset.id }}</b></td></tr>
+        {% if asset._bridge_uam_asset_tag %}<tr><td class="safe-key">UAM Asset Tag</td><td><b>{{ asset._bridge_uam_asset_tag }}</b></td></tr>{% endif %}
+        <tr><td class="safe-key">S/N</td><td>{{ asset.serial or '—' }}</td></tr>
+        <tr><td class="safe-key">Dopasowano po:</td><td>{{ pending.match_fields }}</td></tr>
+      </table>
+      <form class="safe-center" method="post" action="{{ url_for('terminal_confirm') }}?t={{ terminal_id }}">
+        <input class="safe-button safe-green" type="submit" value="{% if terminal.operation_mode == 'checkin' %}PRZYJMIJ{% else %}PRZYPISZ{% endif %}" autofocus>
+      </form>
+      <form class="safe-center" method="post" action="{{ url_for('terminal_cancel') }}?t={{ terminal_id }}">
+        <input class="safe-button safe-red" type="submit" value="ANULUJ">
+      </form>
+      <div class="safe-hint">Enter zatwierdza aktywny przycisk.</div>
+    </div>
+  {% else %}
+    <div class="safe-target">
+      {% if terminal.operation_mode == 'checkin' %}
+        <div class="safe-label">{% if terminal.batch_mode %}MASOWY ZWROT{% else %}TRYB ZWROTU{% endif %}</div>
+        <b>{% if terminal.return_choice == 'service' %}Oczekujące{% else %}Gotowy do wydania{% endif %}</b>
+        {% if terminal.return_choice == 'service' %}<span>Uwagi: Wymaga serwisu</span>{% endif %}
+      {% else %}
+        <div class="safe-label">{% if terminal.batch_mode %}MASOWE WYDANIE · ODBIORCA{% else %}ODBIORCA{% endif %}</div>
+        <b>{{ terminal.target_name }}</b>
+        <span>{{ terminal.target_email }}</span>
+      {% endif %}
+    </div>
+    <div class="safe-panel safe-center">
+      <div class="safe-label">{% if terminal.operation_mode == 'checkin' %}ZESKANUJ ZWRACANY SPRZĘT{% else %}ZESKANUJ SPRZĘT{% endif %}</div>
+      <form method="post" action="{{ url_for('terminal_scan') }}?t={{ terminal_id }}&amp;field={{ scan_field_name }}" autocomplete="off">
+        <input id="{{ scan_field_name }}" class="safe-input" type="text" name="{{ scan_field_name }}" value="" size="18" maxlength="2048" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
+        <input class="safe-button safe-orange" type="submit" value="OK">
+      </form>
+    </div>
+
+    {% if terminal.batch_mode %}
+      <div class="safe-panel">
+        <table class="safe-batch-heading" cellspacing="0" cellpadding="0"><tr><td>LISTA</td><td class="safe-count"><b>{{ batch_items|length }} szt.</b></td></tr></table>
+        {% if batch_items %}
+          {% for item in batch_items %}
+            {% set asset = item.asset %}
+            <div class="safe-batch-row">
+              <b>{{ asset.asset_tag or asset.id }}</b>
+              <span>{{ asset_model_label(asset) }}</span>
+              {% if terminal.operation_mode == 'checkin' and asset.assigned_to %}<span>{{ asset.assigned_to.name or asset.assigned_to.email or asset.assigned_to.id }}</span>{% endif %}
+            </div>
+          {% endfor %}
+          <form class="safe-center" method="post" action="{{ url_for('terminal_confirm_batch') }}?t={{ terminal_id }}">
+            <input class="safe-button safe-green safe-batch-confirm" type="submit" value="ZATWIERDŹ LISTĘ ({{ batch_items|length }} SZT.)">
+          </form>
+          <form class="safe-center" method="post" action="{{ url_for('terminal_clear_batch') }}?t={{ terminal_id }}">
+            <input class="safe-button safe-red" type="submit" value="WYCZYŚĆ LISTĘ">
+          </form>
+        {% else %}
+          <div class="safe-muted">Skanuj kolejne urządzenia. Zatwierdzenie pojawi się po dodaniu pierwszego.</div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <form class="safe-center safe-refresh-form" method="get" action="{{ url_for('terminal') }}">
+      <input type="hidden" name="t" value="{{ terminal_id }}">
+      <input class="safe-small-button" type="submit" value="ODŚWIEŻ TRYB">
+    </form>
+    <form class="safe-center" method="post" action="{{ url_for('terminal_unpair') }}?t={{ terminal_id }}">
+      <input class="safe-button safe-white" type="submit" value="ZAKOŃCZ SESJĘ">
+    </form>
+  {% endif %}
+
+  <div class="safe-footer">SAFE v{{ bridge_version }} · Terminal {{ terminal_id[:8] }}</div>
+</body>
+</html>

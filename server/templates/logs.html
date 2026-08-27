@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Dziennik | Snipe Bridge{% endblock %}
+{% block content %}
+<section class="hero-row compact-hero logs-hero">
+  <div>
+    <p class="eyebrow">Dziennik operacji</p>
+    <h1>Historia działań</h1>
+    <p class="log-access-note">
+      {% if operator_is_admin %}Widok administratora: operacje wszystkich użytkowników.{% else %}Wyświetlane są wyłącznie operacje wykonane przez Ciebie.{% endif %}
+    </p>
+  </div>
+  <div class="log-header-actions">
+    <a class="secondary-button" href="{{ export_csv_url }}">Eksport CSV</a>
+    <a class="primary-button" href="{{ export_xlsx_url }}">Eksport XLSX</a>
+    <a class="secondary-button" href="{{ url_for('operator_panel') }}">Wróć do panelu</a>
+  </div>
+</section>
+
+{% for error in filter_errors %}<div class="notice notice-error">{{ error }}</div>{% endfor %}
+
+<section class="card audit-filter-card">
+  <form method="get" action="{{ url_for('operator_logs') }}" class="audit-filter-grid">
+    <label>Od daty
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>Do daty
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <label>Wynik
+      <select name="result">
+        <option value="">Wszystkie</option>
+        {% for value in filter_options.result %}<option value="{{ value }}"{% if filters.result == value %} selected{% endif %}>{{ result_labels.get(value, value) }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Operacja
+      <select name="action">
+        <option value="">Wszystkie</option>
+        {% for value in filter_options.action %}<option value="{{ value }}"{% if filters.action == value %} selected{% endif %}>{{ action_labels.get(value, value) }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Sprzęt
+      <input type="search" name="asset" value="{{ filters.asset }}" placeholder="Asset Tag lub kod skanu">
+    </label>
+    <label>Odbiorca
+      <input type="search" name="target" value="{{ filters.target }}" placeholder="Nazwa odbiorcy">
+    </label>
+    <label>Operator
+      <input type="search" name="operator" value="{{ filters.operator }}" placeholder="Nazwa lub e-mail">
+    </label>
+    <label>Komunikat
+      <input type="search" name="message" value="{{ filters.message }}" placeholder="Fragment komunikatu">
+    </label>
+    <label>Wpisów na stronę
+      <select name="per_page">
+        {% for value in per_page_options %}<option value="{{ value }}"{% if per_page == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="audit-filter-actions">
+      <button class="primary-button" type="submit">Filtruj</button>
+      <a class="secondary-button" href="{{ url_for('operator_logs') }}">Wyczyść filtry</a>
+    </div>
+  </form>
+</section>
+
+<section class="card table-card audit-table-card">
+  <div class="audit-summary">
+    <strong>{{ total }} wpisów</strong>
+    {% if total %}<span>Wyświetlane {{ page_start }}–{{ page_end }}</span>{% endif %}
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Czas</th><th>Wynik</th><th>Operacja</th><th>Sprzęt</th><th>Odbiorca</th><th>Operator</th><th>Komunikat</th></tr></thead>
+      <tbody>
+      {% for row in logs %}
+        <tr class="audit-row audit-row-{{ row.result_tone }}">
+          <td class="mono">{{ row.created_display }}</td>
+          <td><span class="result-pill result-{{ row.result_tone }}">{{ row.result_label }}</span></td>
+          <td>{{ row.action_label }}</td>
+          <td>
+            <span data-no-localize><strong>{{ row.asset_tag or row.scan_value or '—' }}</strong>
+            {% if row.asset_tag and row.scan_value and row.asset_tag != row.scan_value %}<small class="table-subline">Skan: {{ row.scan_value }}</small>{% endif %}</span>
+          </td>
+          <td><span data-no-localize>{{ row.target_name or '—' }}</span></td>
+          <td>
+            <span data-no-localize>{{ row.operator_name or '—' }}
+            {% if row.operator_email %}<small class="table-subline">{{ row.operator_email }}</small>{% endif %}
+            {% if row.operator_user_id %}<small class="table-subline">Snipe ID {{ row.operator_user_id }}</small>{% endif %}</span>
+          </td>
+          <td>{{ row.message or '—' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty-cell">Brak operacji spełniających wybrane warunki.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="audit-pagination" aria-label="Stronicowanie dziennika">
+    {% if previous_url %}<a class="secondary-button compact" href="{{ previous_url }}">Poprzednia</a>{% else %}<span></span>{% endif %}
+    <strong>Strona {{ page }} z {{ total_pages }}</strong>
+    {% if next_url %}<a class="secondary-button compact" href="{{ next_url }}">Następna</a>{% else %}<span></span>{% endif %}
+  </nav>
+</section>
+{% endblock %}

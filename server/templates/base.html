@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="{{ app_language }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png', v='3') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='operator.css', v='81') }}">
+  <style>:root{--brand-primary:{{ primary_color }};--brand-accent:{{ accent_color }};--brand-header:{{ header_color }};--green:var(--brand-primary);--amber:var(--brand-primary)}</style>
+</head>
+<body{% if operator_terminal_guard %} class="operator-guard-active"{% endif %}>
+  <div id="operator-screen-guard" class="operator-screen-guard">
+    <div class="operator-screen-guard-box">
+      <b>PANEL OPERATORA</b>
+      <p>Ten ekran jest przeznaczony dla komputera operatora.</p>
+      <a href="{{ url_for('terminal') }}">PRZEJDŹ DO WIDOKU TERMINALA</a>
+    </div>
+  </div>
+  {% if not operator_terminal_guard %}
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('operator_panel') }}">
+      <img class="brand-logo" src="{{ url_for('branding_logo') }}" alt="{{ organization_name }}" draggable="false" oncontextmenu="return false">
+      <span>{{ app_name }}</span>
+    </a>
+    {% if operator_name %}
+      <div class="operator-chip">
+        <a class="topbar-link" href="{{ url_for('operator_logs') }}">{{ tr('history') }}</a>
+        {% if operator_is_admin|default(false) %}<a class="topbar-link" href="{{ url_for('admin_settings') }}">{{ tr('settings') }}</a>{% endif %}
+        <span>{{ operator_name }}{% if operator_email and operator_email != operator_name %} · {{ operator_email }}{% endif %}</span>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link-button" type="submit">{{ tr('logout') }}</button>
+        </form>
+      </div>
+    {% endif %}
+  </header>
+
+  <main class="shell">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        {% if category in ('terminal-ready', 'success', 'info', 'toast-warning', 'toast-error') %}
+          <div class="operator-toast operator-toast-{{ category }}" role="status" aria-live="polite">
+            <strong>{{ message }}</strong>
+            {% if category == 'terminal-ready' %}<span>Kontynuuj na terminalu.</span>{% endif %}
+          </div>
+        {% else %}
+          <div class="notice notice-{{ category }}">{{ message }}</div>
+        {% endif %}
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+  {% endif %}
+  {% if not operator_terminal_guard %}
+  <script>
+  (function () {
+    var userAgent = String(navigator.userAgent || '').toLowerCase();
+    var screenWidth = (window.screen && window.screen.width) ? window.screen.width : 0;
+    var isLegacyTerminal = userAgent.indexOf('windows ce') >= 0 || userAgent.indexOf('mc319') >= 0 || userAgent.indexOf('mc31') >= 0;
+    if (isLegacyTerminal && (!screenWidth || screenWidth <= 640)) {
+      var guard = document.getElementById('operator-screen-guard');
+      document.body.className += ' operator-guard-active';
+      if (guard) { guard.style.display = 'block'; }
+    }
+    var forms = document.getElementsByTagName('form');
+    var inputs = document.getElementsByTagName('input');
+    var index;
+    for (index = 0; index < forms.length; index += 1) {
+      forms[index].setAttribute('autocomplete', 'off');
+    }
+    for (index = 0; index < inputs.length; index += 1) {
+      var inputType = String(inputs[index].type || 'text').toLowerCase();
+      if (inputType === 'text' || inputType === 'search' || inputType === 'email' || inputType === 'password' || inputType === 'tel' || inputType === 'url') {
+        inputs[index].setAttribute('autocomplete', 'off');
+        inputs[index].setAttribute('autocorrect', 'off');
+        inputs[index].setAttribute('autocapitalize', 'off');
+        inputs[index].setAttribute('spellcheck', 'false');
+      }
+    }
+  }());
+  </script>
+  <script>
+  (function () {
+    var toasts = document.getElementsByClassName('operator-toast');
+    var index;
+    for (index = 0; index < toasts.length; index += 1) {
+      (function (toast) {
+        window.setTimeout(function () {
+          toast.className += ' operator-toast-closing';
+          window.setTimeout(function () {
+            if (toast.parentNode) { toast.parentNode.removeChild(toast); }
+          }, 240);
+        }, 4000);
+      }(toasts[index]));
+    }
+  }());
+  </script>
+  {% endif %}
+</body>
+</html>

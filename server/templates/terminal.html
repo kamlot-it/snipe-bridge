@@ -1,0 +1,659 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="{{ app_language }}">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="MobileOptimized" content="320">
+  <meta name="HandheldFriendly" content="true">
+  <meta name="viewport" content="width=320, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>{{ app_name }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png', v='3') }}">
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='terminal.css', v='87') }}">
+  <style type="text/css">
+    .header-table { border-bottom-color: {{ primary_color }}; color: {{ primary_color }}; background-color: {{ header_color }}; }
+    .scan-button, .pairing-scan-button { border-color: {{ primary_color }}; background-color: {{ primary_color }}; }
+    .scan-input, .target-box, .terminal-screen-guard-box { border-color: {{ primary_color }}; }
+    .batch-heading { border-bottom-color: {{ primary_color }}; color: {{ primary_color }}; }
+    .confirm { background-color: {{ accent_color }}; }
+    .terminal-language-switch a.active { border-color: {{ primary_color }}; background-color: {{ primary_color }}; }
+  </style>
+</head>
+<body class="{% if not terminal.is_paired %}pairing-page{% endif %}" onload="terminalReady()">
+  {% macro asset_summary(asset, match_fields=none) -%}
+    {% if asset_images_enabled and asset.image %}<div class="asset-image-box"><img class="asset-image" src="{{ url_for('terminal_image') }}?t={{ terminal_id }}&amp;asset={{ asset.id }}&amp;v=74" width="78" height="72" alt="Zdjęcie sprzętu"></div>{% endif %}
+    {% if asset.category and asset.category.name %}
+      <div id="asset-category-anchor" class="asset-category" title="{{ asset.category.name|e }}">{{ asset.category.name|truncate(60, true, '…') }}</div>
+    {% elif asset.model and asset.model.category and asset.model.category.name %}
+      <div id="asset-category-anchor" class="asset-category" title="{{ asset.model.category.name|e }}">{{ asset.model.category.name|truncate(60, true, '…') }}</div>
+    {% endif %}
+    <div class="asset-model{% if not asset.model %} missing{% endif %}" title="{{ asset_model_label(asset)|e }}">{{ asset_model_label(asset)|truncate(60, true, '…') }}</div>
+    {% if asset.name %}<div class="asset-name">Nazwa: {{ asset.name }}</div>{% endif %}
+    <table class="details" cellspacing="0" cellpadding="0">
+      <tr><td>Asset Tag</td><td><b>{{ asset.asset_tag or asset.id }}</b></td></tr>
+      {% if asset._bridge_uam_asset_tag %}<tr><td>UAM Asset Tag</td><td><b>{{ asset._bridge_uam_asset_tag }}</b></td></tr>{% endif %}
+      <tr><td>S/N</td><td>{{ asset.serial or '—' }}</td></tr>
+      {% if match_fields is not none %}<tr><td>Dopasowano po:</td><td>{{ match_fields }}</td></tr>{% endif %}
+    </table>
+  {%- endmacro %}
+  <div id="terminal-screen-guard" class="terminal-screen-guard">
+    <div class="terminal-screen-guard-box">
+      <b>WIDOK TERMINALA</b>
+      <p>Ten ekran jest przeznaczony dla skanera ręcznego.</p>
+      <a href="{{ url_for('operator_panel') }}">PRZEJDŹ DO PANELU OPERATORA</a>
+    </div>
+  </div>
+  <table class="header-table" cellspacing="0" cellpadding="0">
+    <tr>
+      <td class="header-title"><b>{{ terminal_title|upper }}</b></td>
+      {% if not terminal.is_paired %}<td class="header-language-cell"><div class="terminal-language-switch"><a{% if app_language == 'pl' %} class="active"{% endif %} href="{{ url_for('set_language', language='pl', next=url_for('terminal', t=terminal_id)) }}">PL</a><a{% if app_language == 'en' %} class="active"{% endif %} href="{{ url_for('set_language', language='en', next=url_for('terminal', t=terminal_id)) }}">EN</a></div></td>{% endif %}
+    </tr>
+  </table>
+
+  {% if terminal.is_paired and terminal.operation_mode != 'setup' and result and message %}
+    <div class="message-slot"><div class="message {{ result|e }}">{{ message }}{% if message_count %}<span class="message-count">{{ message_count }} szt.</span>{% endif %}</div></div>
+  {% endif %}
+
+  {% if not terminal.is_paired %}
+    <div class="panel center pairing-panel">
+      <div class="label">ZESKANUJ QR PAROWANIA</div>
+      <form id="primary-form" method="post" action="{{ url_for('terminal_pair_qr') }}?t={{ terminal_id }}&amp;field={{ scan_field_name }}" autocomplete="off" onsubmit="return prepareScanSubmit()">
+        <input id="{{ scan_field_name }}" class="scan-input pairing-scan-input" type="text" name="{{ scan_field_name }}" value="" maxlength="2048" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus onblur="schedulePrimaryFocus()" onkeydown="return handleScanEnter(event)" onkeypress="return handleScanEnter(event)" onkeyup="return handleScanEnter(event)">
+        <input class="button scan-button pairing-scan-button" type="submit" value="PARUJ" onclick="return authorizeScanButton()">
+      </form>
+      {% if result and message %}<div class="pairing-message {{ result|e }}">{{ message }}</div>{% endif %}
+      <div class="pairing-or">ALBO WPISZ KOD NA KOMPUTERZE</div>
+      <div class="pair-code" id="pair-code">{{ terminal.pair_code }}</div>
+      <div class="terminal-id"><b>ID TERMINALA</b><span>{{ terminal_id }}</span></div>
+    </div>
+  {% elif terminal.operation_mode == 'setup' %}
+    <div class="panel center setup-waiting-panel">
+      <table class="setup-status-table" cellspacing="0" cellpadding="0">
+        <tr>
+          <td class="setup-mark-cell"><span class="setup-waiting-mark">OK</span></td>
+          <td class="setup-copy-cell"><b>TERMINAL SPAROWANY</b><span>Wybierz wydanie lub zwrot w panelu operatora.</span></td>
+        </tr>
+      </table>
+    </div>
+    <form class="session-form" method="post" action="{{ url_for('terminal_unpair') }}?t={{ terminal_id }}">
+      <input class="button change" type="submit" value="ZAKOŃCZ SESJĘ">
+    </form>
+  {% elif pending %}
+    {% set asset = pending.asset %}
+    <div class="target-box">
+      {% if terminal.operation_mode == 'checkin' %}
+        {% set assigned = asset.assigned_to %}
+        <div class="label">AKTUALNIE PRZYPISANO</div>
+        <b>{{ assigned.name or assigned.username or assigned.email or assigned.id }}</b>
+        {% if assigned.email %}<span>{{ assigned.email }}</span>{% endif %}
+        <span class="target-status">Po zwrocie: {{ asset._bridge_status_name }}</span>
+      {% else %}
+        <div class="label">ODBIORCA</div>
+        <b>{{ terminal.target_name }}</b>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <div class="label">POTWIERDŹ SPRZĘT</div>
+      {{ asset_summary(asset, pending.match_fields) }}
+      <form id="primary-form" method="post" action="{{ url_for('terminal_confirm') }}?t={{ terminal_id }}" onsubmit="return prepareTerminalSubmit()">
+        <input id="primary" class="button confirm" type="submit" value="{% if terminal.operation_mode == 'checkin' %}PRZYJMIJ{% else %}PRZYPISZ{% endif %}" autofocus>
+      </form>
+      <form id="cancel-form" method="post" action="{{ url_for('terminal_cancel') }}?t={{ terminal_id }}" onsubmit="return prepareTerminalSubmit()">
+        <input class="button cancel" type="submit" value="ANULUJ">
+      </form>
+      <div class="key-hint">Zielony zatwierdza, czerwony anuluje.</div>
+    </div>
+  {% elif batch_remove_item %}
+    {% set asset = batch_remove_item.asset %}
+    <div class="panel batch-remove-confirm">
+      <div class="label">USUNĄĆ Z LISTY?</div>
+      {{ asset_summary(asset) }}
+      <form id="primary-form" method="post" action="{{ url_for('terminal_remove_batch_item') }}?t={{ terminal_id }}" onsubmit="return prepareTerminalSubmit()">
+        <input type="hidden" name="asset_id" value="{{ asset.id }}">
+        <input id="primary" class="button confirm" type="submit" value="USUŃ Z LISTY" autofocus>
+      </form>
+      <form id="cancel-form" method="post" action="{{ url_for('terminal_cancel') }}?t={{ terminal_id }}" onsubmit="return prepareTerminalSubmit()">
+        <input class="button cancel" type="submit" value="ANULUJ">
+      </form>
+      <div class="key-hint">Zielony usuwa, czerwony anuluje.</div>
+    </div>
+  {% else %}
+    <div class="target-box{% if terminal.batch_mode %} batch-target{% endif %}">
+      {% if terminal.operation_mode == 'checkin' %}
+        <div class="label">{% if terminal.batch_mode %}MASOWY ZWROT{% else %}TRYB ZWROTU{% endif %}</div>
+        <b>{% if terminal.return_choice == 'service' %}Oczekujące{% else %}Gotowy do wydania{% endif %}</b>
+        {% if terminal.return_choice == 'service' %}<span>Uwagi: Wymaga serwisu</span>{% endif %}
+      {% else %}
+        <div class="label">{% if terminal.batch_mode %}MASOWE WYDANIE · ODBIORCA{% else %}ODBIORCA{% endif %}</div>
+        <b>{{ terminal.target_name }}</b>
+        <span>{{ terminal.target_email }}</span>
+      {% endif %}
+    </div>
+    <div class="panel scan-panel{% if terminal.batch_mode %} batch-scan-panel{% endif %}">
+      <div class="label">{% if terminal.operation_mode == 'checkin' %}ZESKANUJ ZWRACANY SPRZĘT{% else %}ZESKANUJ SPRZĘT{% endif %}</div>
+      <form id="primary-form" method="post" action="{{ url_for('terminal_scan') }}?t={{ terminal_id }}&amp;field={{ scan_field_name }}" autocomplete="off" onsubmit="return prepareScanSubmit()">
+        <input id="{{ scan_field_name }}" class="scan-input" type="text" name="{{ scan_field_name }}" value="" maxlength="2048" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus onblur="schedulePrimaryFocus()" onkeydown="return handleScanEnter(event)" onkeypress="return handleScanEnter(event)" onkeyup="return handleScanEnter(event)">
+        <input class="button scan-button" type="submit" value="OK" onclick="return authorizeScanButton()">
+      </form>
+    </div>
+
+    {% if terminal.batch_mode %}
+      <div class="panel batch-panel">
+        <table class="batch-heading" cellspacing="0" cellpadding="0"><tr><td>LISTA</td><td><b>{{ batch_items|length }} szt.</b></td></tr></table>
+        {% if batch_items %}
+          <div class="batch-list">
+            {% for item in batch_items %}
+              {% set asset = item.asset %}
+              {% set batch_label = asset_model_label(asset) %}
+              <div id="batch-row-{{ loop.index }}" class="batch-row batch-hold-row" unselectable="on" onmousedown="return startBatchHold(event, {{ asset.id }}, 'batch-row-{{ loop.index }}', 'batch-hold-fill-{{ loop.index }}')" onmouseup="return finishBatchHold(event)" onmouseleave="cancelBatchHold(false)" onclick="return finishBatchRowClick(event)" oncontextmenu="return blockTerminalContextMenu(event, {{ asset.id }})" onselectstart="return blockBatchSelection(event)">
+                <b>{{ asset.asset_tag or asset.id }}</b>
+                <span title="{{ batch_label|e }}">{{ batch_label|truncate(60, true, '…') }}</span>
+                {% if terminal.operation_mode == 'checkin' and asset.assigned_to %}<small>{{ asset.assigned_to.name or asset.assigned_to.email or asset.assigned_to.id }}</small>{% endif %}
+                <i class="batch-hold-track"><i id="batch-hold-fill-{{ loop.index }}" class="batch-hold-fill"></i></i>
+                <div class="batch-remove-choice">
+                  <a class="batch-remove-choice-button" href="#" unselectable="on" onmousedown="return stopBatchRemoveChoiceEvent(event)" onmouseup="return stopBatchRemoveChoiceEvent(event)" onclick="return chooseBatchRemove(event, {{ asset.id }})">WYBIERZ DO USUNIĘCIA</a>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <form id="batch-remove-review-form" class="hidden-form" method="post" action="{{ url_for('terminal_review_batch_remove') }}?t={{ terminal_id }}">
+            <input id="batch-remove-asset-id" type="hidden" name="asset_id" value="">
+          </form>
+          <form id="batch-confirm-form" method="post" action="{{ url_for('terminal_confirm_batch') }}?t={{ terminal_id }}" onsubmit="return prepareTerminalSubmit()">
+            <input class="button confirm batch-confirm-button" type="submit" value="ZATWIERDŹ LISTĘ ({{ batch_items|length }} SZT.)">
+          </form>
+          <form id="cancel-form" method="post" action="{{ url_for('terminal_clear_batch') }}?t={{ terminal_id }}" onsubmit="return prepareTerminalSubmit()">
+            <input class="button cancel" type="submit" value="WYCZYŚĆ LISTĘ">
+          </form>
+        {% else %}
+          <p class="muted batch-empty">Skanuj kolejne urządzenia. Zatwierdzenie pojawi się po dodaniu pierwszego.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <form class="session-form" method="post" action="{{ url_for('terminal_unpair') }}?t={{ terminal_id }}">
+      <input class="button change" type="submit" value="ZAKOŃCZ SESJĘ">
+    </form>
+  {% endif %}
+
+  <div class="footer">v{{ bridge_version }} · Terminal {{ terminal_id[:8] }}</div>
+  <script type="text/javascript">
+    var terminalActionLocked = false;
+    var scanSubmitTimer = null;
+    var scanSubmitAuthorized = false;
+    var scanLastObservedValue = '';
+    var scanStablePasses = 0;
+    var lastActivitySignal = 0;
+    var terminalPollTimer = null;
+    var terminalPollInFlight = false;
+    var batchHoldTimer = null;
+    var batchHoldRow = null;
+    var batchHoldFill = null;
+    var batchHoldProgress = 0;
+    var batchHoldStartX = 0;
+    var batchHoldStartY = 0;
+    var terminalStatusSignature = "{% if terminal.is_paired %}paired:{{ terminal.operation_mode }}:{{ 1 if terminal.batch_mode else 0 }}:{{ terminal.target_user_id or 0 }}:{{ terminal.return_choice or '-' }}:{{ terminal.updated_at }}{% else %}waiting:{{ terminal.pair_code }}{% endif %}";
+
+    function getPrimaryItem() {
+      var item = document.getElementById('primary');
+      var inputs;
+      var index;
+      if (item) { return item; }
+      inputs = document.getElementsByTagName('input');
+      for (index = 0; index < inputs.length; index += 1) {
+        if (
+          String(inputs[index].type || '').toLowerCase() == 'text' &&
+          (' ' + String(inputs[index].className || '') + ' ').indexOf(' scan-input ') >= 0
+        ) {
+          return inputs[index];
+        }
+      }
+      return null;
+    }
+
+    function focusPrimary() {
+      var item = getPrimaryItem();
+      if (item && !terminalActionLocked) {
+        try {
+          item.focus();
+          if (item.type == 'text' && item.select && item.value == '') { item.select(); }
+        } catch (ignore) {}
+      }
+    }
+
+    function schedulePrimaryFocus() {
+      if (terminalActionLocked) { return; }
+      window.setTimeout(function() {
+        var item = getPrimaryItem();
+        if (item && item.type == 'text') { focusPrimary(); }
+      }, 0);
+    }
+
+    function alignAssetCategory() {
+      var item = document.getElementById('asset-category-anchor');
+      var current = item;
+      var top = 0;
+      if (!item) { return; }
+      while (current) {
+        top += current.offsetTop || 0;
+        current = current.offsetParent;
+      }
+      window.scrollTo(0, Math.max(0, top - 5));
+    }
+
+    function scanHasValue() {
+      var item = getPrimaryItem();
+      return item && item.type == 'text' && item.value.replace(/^\s+|\s+$/g, '') != '';
+    }
+
+    function shortenHardwareQrBeforeSubmit() {
+      var item = getPrimaryItem();
+      var value;
+      var compact;
+      var lower;
+      var marker;
+      var position;
+      var assetId = '';
+      var character;
+      if (!item || item.type != 'text') { return; }
+      value = String(item.value || '');
+      compact = value.replace(/\s/g, '');
+      lower = compact.toLowerCase();
+      marker = lower.indexOf('/hardware/');
+      if (marker < 0) { return; }
+      position = marker + 10;
+      while (position < compact.length) {
+        character = compact.charAt(position);
+        if (character < '0' || character > '9') { break; }
+        assetId += character;
+        position += 1;
+      }
+      if (assetId != '') {
+        /* Send a short canonical path instead of a long URL through IE Mobile. */
+        item.value = '/hardware/' + assetId;
+      }
+    }
+
+    function scheduleScanSubmit() {
+      if (terminalActionLocked) { return; }
+      if (scanSubmitTimer !== null) {
+        window.clearTimeout(scanSubmitTimer);
+      }
+      var item = getPrimaryItem();
+      scanLastObservedValue = item && item.type == 'text' ? String(item.value || '') : '';
+      scanStablePasses = 0;
+      scanSubmitTimer = window.setTimeout(checkScanStability, 250);
+    }
+
+    function checkScanStability() {
+      var item = getPrimaryItem();
+      var currentValue = item && item.type == 'text' ? String(item.value || '') : '';
+      scanSubmitTimer = null;
+      if (terminalActionLocked || !scanHasValue()) { return; }
+      if (currentValue != scanLastObservedValue) {
+        scanLastObservedValue = currentValue;
+        scanStablePasses = 0;
+      } else {
+        scanStablePasses += 1;
+      }
+      if (scanStablePasses >= 4) {
+        shortenHardwareQrBeforeSubmit();
+        scanSubmitAuthorized = true;
+        submitTerminalForm('primary-form', true);
+        return;
+      }
+      scanSubmitTimer = window.setTimeout(checkScanStability, 250);
+    }
+
+    function prepareTerminalSubmit() {
+      if (terminalActionLocked) { return false; }
+      terminalActionLocked = true;
+      return true;
+    }
+
+    function prepareScanSubmit() {
+      if (terminalActionLocked || !scanHasValue()) { return false; }
+      if (!scanSubmitAuthorized) {
+        scheduleScanSubmit();
+        return false;
+      }
+      terminalActionLocked = true;
+      return true;
+    }
+
+    function authorizeScanButton() {
+      if (terminalActionLocked || !scanHasValue()) { return false; }
+      shortenHardwareQrBeforeSubmit();
+      scanSubmitAuthorized = true;
+      return true;
+    }
+
+    function submitTerminalForm(formId, requireCode) {
+      var form = document.getElementById(formId);
+      if (!form || terminalActionLocked) { return false; }
+      if (requireCode && !scanHasValue()) { return false; }
+      if (requireCode) {
+        shortenHardwareQrBeforeSubmit();
+        scanSubmitAuthorized = true;
+      }
+      terminalActionLocked = true;
+      form.submit();
+      return true;
+    }
+
+    function stopKey(eventObject) {
+      if (eventObject.preventDefault) { eventObject.preventDefault(); }
+      eventObject.returnValue = false;
+      eventObject.cancelBubble = true;
+      return false;
+    }
+
+    function handleScanEnter(eventObject) {
+      var eventValue = eventObject || window.event;
+      var keyCode = eventValue.keyCode || eventValue.which || 0;
+      noteTerminalInteraction();
+      if ((keyCode == 13 || keyCode == 10) && scanHasValue()) {
+        if (scanSubmitTimer !== null) {
+          window.clearTimeout(scanSubmitTimer);
+          scanSubmitTimer = null;
+        }
+        scheduleScanSubmit();
+        return stopKey(eventValue);
+      }
+      /*
+       * Never start submission from an ordinary character. A legacy scanner
+       * can pause while typing a long URL; treating that pause as the end of
+       * input submitted truncated values such as "https://host.exam".
+       * If Enter was already received and more characters still arrive, only
+       * postpone the existing stability check until the value is complete.
+       */
+      if (scanSubmitTimer !== null) {
+        window.clearTimeout(scanSubmitTimer);
+        scanLastObservedValue = getPrimaryItem() ? String(getPrimaryItem().value || '') : '';
+        scanStablePasses = 0;
+        scanSubmitTimer = window.setTimeout(checkScanStability, 250);
+      }
+      return true;
+    }
+
+    function makeStatusRequest() {
+      if (window.XMLHttpRequest) { return new XMLHttpRequest(); }
+      try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch (ignore) {}
+      return null;
+    }
+
+    function scheduleTerminalPoll(delay) {
+      if (terminalActionLocked || terminalPollTimer !== null || terminalPollInFlight) { return; }
+      terminalPollTimer = window.setTimeout(function() {
+        terminalPollTimer = null;
+        pollTerminalStatus();
+      }, delay);
+    }
+
+    function noteTerminalInteraction() {
+      scheduleTerminalPoll(0);
+    }
+
+    function reloadTerminalDocument() {
+      var reloadUrl = '{{ url_for('terminal') }}?t={{ terminal_id }}&_=' + new Date().getTime();
+      window.location.replace(reloadUrl);
+    }
+
+    function pollTerminalStatus() {
+      if (terminalActionLocked || terminalPollInFlight) { return; }
+      var codeBox = document.getElementById('pair-code');
+      var statusRequest = makeStatusRequest();
+      if (!statusRequest) { return; }
+      terminalPollInFlight = true;
+      statusRequest.onreadystatechange = function() {
+        if (statusRequest.readyState != 4) { return; }
+        terminalPollInFlight = false;
+        if (statusRequest.status == 200) {
+          var answer = statusRequest.responseText || '';
+          if (answer.indexOf('paired:') == 0) {
+            if (codeBox || answer != terminalStatusSignature) {
+              reloadTerminalDocument();
+              return;
+            }
+          } else if (answer.indexOf('waiting:') == 0) {
+            if (!codeBox) {
+              reloadTerminalDocument();
+              return;
+            }
+            codeBox.innerHTML = answer.substring(8);
+            terminalStatusSignature = answer;
+          }
+        }
+        scheduleTerminalPoll(2500);
+      };
+      statusRequest.open('GET', '{{ url_for('terminal_status') }}?t={{ terminal_id }}&_=' + new Date().getTime(), true);
+      statusRequest.send(null);
+    }
+
+    function signalTerminalActivity() {
+      {% if terminal.is_paired %}
+      var now = new Date().getTime();
+      if (now - lastActivitySignal < 60000) { return; }
+      lastActivitySignal = now;
+      var activityRequest = makeStatusRequest();
+      if (!activityRequest) { return; }
+      activityRequest.open('POST', '{{ url_for('terminal_touch') }}?t={{ terminal_id }}', true);
+      activityRequest.send(null);
+      {% endif %}
+    }
+
+    function handleTerminalKey(eventObject) {
+      var eventValue = eventObject || window.event;
+      var keyCode = eventValue.keyCode || eventValue.which || 0;
+      var primary = getPrimaryItem();
+      noteTerminalInteraction();
+      signalTerminalActivity();
+
+      /* MC31xx: zielony klawisz jest mapowany na F14, czerwony na F15. */
+      if (keyCode == 114 || keyCode == 125) {
+        if (submitTerminalForm('primary-form', primary && primary.type == 'text')) {
+          return stopKey(eventValue);
+        }
+        if (submitTerminalForm('batch-confirm-form', false)) {
+          return stopKey(eventValue);
+        }
+      }
+      if (keyCode == 13 && primary && primary.type != 'text') {
+        if (submitTerminalForm('primary-form', false)) { return stopKey(eventValue); }
+      }
+      if (keyCode == 27 || keyCode == 115 || keyCode == 126) {
+        if (submitTerminalForm('cancel-form', false)) { return stopKey(eventValue); }
+      }
+      return true;
+    }
+
+    function isInteractiveTarget(target) {
+      while (target && target != document.body) {
+        var tagName = String(target.tagName || '').toLowerCase();
+        if (tagName == 'input' || tagName == 'button' || tagName == 'select' || tagName == 'textarea' || tagName == 'a') {
+          return true;
+        }
+        target = target.parentNode;
+      }
+      return false;
+    }
+
+    function handleTerminalClick(eventObject) {
+      var eventValue = eventObject || window.event;
+      var target = eventValue.target || eventValue.srcElement;
+      var primary = getPrimaryItem();
+      noteTerminalInteraction();
+      signalTerminalActivity();
+      if (primary && primary.type == 'text' && target != primary) {
+        schedulePrimaryFocus();
+      }
+      return true;
+    }
+
+    function cancelBatchHold(refocusField) {
+      if (batchHoldTimer !== null) {
+        window.clearInterval(batchHoldTimer);
+        batchHoldTimer = null;
+      }
+      if (batchHoldFill) { batchHoldFill.style.width = '0%'; }
+      if (batchHoldRow) { batchHoldRow.className = batchHoldRow.className.replace(/ holding/g, ''); }
+      batchHoldRow = null;
+      batchHoldFill = null;
+      batchHoldProgress = 0;
+      if (refocusField) { window.setTimeout(focusPrimary, 0); }
+    }
+
+    function startBatchHold(eventObject, assetId, rowId, fillId) {
+      var eventValue = eventObject || window.event;
+      if (terminalActionLocked) { return false; }
+      cancelBatchHold(false);
+      batchHoldRow = document.getElementById(rowId);
+      batchHoldFill = document.getElementById(fillId);
+      batchHoldStartX = eventValue.clientX || 0;
+      batchHoldStartY = eventValue.clientY || 0;
+      if (batchHoldRow) { batchHoldRow.className += ' holding'; }
+      batchHoldTimer = window.setInterval(function() {
+        batchHoldProgress += 5;
+        if (batchHoldFill) { batchHoldFill.style.width = batchHoldProgress + '%'; }
+        if (batchHoldProgress >= 100) {
+          window.clearInterval(batchHoldTimer);
+          batchHoldTimer = null;
+          openBatchRemoveReview(assetId);
+        }
+      }, 40);
+      return true;
+    }
+
+    function finishBatchHold(eventObject) {
+      var wasHolding = batchHoldTimer !== null || batchHoldRow !== null;
+      cancelBatchHold(wasHolding);
+      return true;
+    }
+
+    function finishBatchRowClick(eventObject) {
+      var eventValue = eventObject || window.event;
+      var target = eventValue.target || eventValue.srcElement;
+      if (isInteractiveTarget(target)) {
+        cancelBatchHold(false);
+        return true;
+      }
+      cancelBatchHold(true);
+      if (eventValue.preventDefault) { eventValue.preventDefault(); }
+      eventValue.returnValue = false;
+      eventValue.cancelBubble = true;
+      return false;
+    }
+
+    function openBatchRemoveReview(assetId) {
+      if (terminalActionLocked) { return false; }
+      cancelBatchHold(false);
+      var assetField = document.getElementById('batch-remove-asset-id');
+      if (assetField) { assetField.value = assetId; }
+      return submitTerminalForm('batch-remove-review-form', false);
+    }
+
+    function stopBatchRemoveChoiceEvent(eventObject) {
+      var eventValue = eventObject || window.event;
+      cancelBatchHold(false);
+      if (eventValue) { eventValue.cancelBubble = true; }
+      return true;
+    }
+
+    function chooseBatchRemove(eventObject, assetId) {
+      var eventValue = eventObject || window.event;
+      stopBatchRemoveChoiceEvent(eventValue);
+      if (eventValue && eventValue.preventDefault) { eventValue.preventDefault(); }
+      if (eventValue) { eventValue.returnValue = false; }
+      openBatchRemoveReview(assetId);
+      return false;
+    }
+
+    function isBatchRowTarget(target) {
+      while (target && target != document.body) {
+        var className = ' ' + String(target.className || '') + ' ';
+        if (className.indexOf(' batch-hold-row ') >= 0) { return true; }
+        target = target.parentNode;
+      }
+      return false;
+    }
+
+    function blockTerminalContextMenu(eventObject, assetId) {
+      var eventValue = eventObject || window.event;
+      var target = eventValue.target || eventValue.srcElement;
+      if (!isBatchRowTarget(target)) { return true; }
+      if (eventValue.preventDefault) { eventValue.preventDefault(); }
+      eventValue.returnValue = false;
+      eventValue.cancelBubble = true;
+      if (assetId) { openBatchRemoveReview(assetId); }
+      return false;
+    }
+
+    function blockBatchSelection(eventObject) {
+      var eventValue = eventObject || window.event;
+      if (eventValue.preventDefault) { eventValue.preventDefault(); }
+      eventValue.returnValue = false;
+      return false;
+    }
+
+    function handleTerminalMouseMove(eventObject) {
+      if (batchHoldTimer === null) { return true; }
+      var eventValue = eventObject || window.event;
+      var movedX = Math.abs((eventValue.clientX || 0) - batchHoldStartX);
+      var movedY = Math.abs((eventValue.clientY || 0) - batchHoldStartY);
+      if (movedX > 8 || movedY > 8) { cancelBatchHold(true); }
+      return true;
+    }
+
+    function guardLargeTerminalScreen() {
+      var screenWidth = 0;
+      if (window.screen && window.screen.width) { screenWidth = window.screen.width; }
+      if (!screenWidth && document.documentElement) { screenWidth = document.documentElement.clientWidth || 0; }
+      if (screenWidth > 640) {
+        var guard = document.getElementById('terminal-screen-guard');
+        if (guard) { guard.style.display = 'block'; }
+        return true;
+      }
+      return false;
+    }
+
+    function disableTextSuggestions() {
+      var forms = document.getElementsByTagName('form');
+      var inputs = document.getElementsByTagName('input');
+      var index;
+      for (index = 0; index < forms.length; index += 1) {
+        forms[index].setAttribute('autocomplete', 'off');
+      }
+      for (index = 0; index < inputs.length; index += 1) {
+        var inputType = String(inputs[index].type || 'text').toLowerCase();
+        if (inputType == 'text' || inputType == 'search' || inputType == 'email' || inputType == 'password' || inputType == 'tel' || inputType == 'url') {
+          inputs[index].setAttribute('autocomplete', 'off');
+          inputs[index].setAttribute('autocorrect', 'off');
+          inputs[index].setAttribute('autocapitalize', 'off');
+          inputs[index].setAttribute('spellcheck', 'false');
+        }
+      }
+    }
+
+    function terminalReady() {
+      disableTextSuggestions();
+      if (guardLargeTerminalScreen()) { return; }
+      document.onkeydown = handleTerminalKey;
+      /*
+       * Do not bind hardware actions to keypress. In IE Mobile printable
+       * lowercase letters use their character codes there: "r" is 114 and
+       * "s" is 115, which collide with the MC31xx green/red mappings. The
+       * keydown event keeps virtual-key codes and does not have that collision.
+       */
+      document.onclick = handleTerminalClick;
+      document.onmouseup = finishBatchHold;
+      document.onmousemove = handleTerminalMouseMove;
+      document.oncontextmenu = blockTerminalContextMenu;
+      window.onfocus = schedulePrimaryFocus;
+      focusPrimary();
+      window.setTimeout(function() {
+        focusPrimary();
+        alignAssetCategory();
+      }, 100);
+      scheduleTerminalPoll(500);
+    }
+  </script>
+</body>
+</html>

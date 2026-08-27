@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible Snipe Bridge problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include API tokens, passwords, cookies, personal data, or production databases. Report security issues privately."
+  - type: input
+    id: version
+    attributes:
+      label: Snipe Bridge version
+      placeholder: "1.0.0-rc14"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Operator panel
+        - Terminal
+        - Snipe-IT integration
+        - Authentication/OIDC
+        - Docker/Portainer
+        - Activity history/export
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Deployment platform, Snipe-IT version, and—if relevant—terminal model, OS, browser, language, and scanner suffix.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Pair terminal…\n2. Select…\n3. Scan…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove all secrets and personal/asset data that should not be public.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I tested the newest release and searched existing issues.
+          required: true
+        - label: I removed secrets and private data.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

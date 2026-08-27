@@ -1,0 +1,58 @@
+services:
+  snipe-terminal-bridge:
+    image: snipe-terminal-bridge:1.0.0-rc14
+    container_name: snipe-terminal-bridge
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      SECRET_KEY: "${SECRET_KEY}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD}"
+      APP_NAME: "${APP_NAME:-Snipe Bridge}"
+      PRIMARY_COLOR: "${PRIMARY_COLOR:-#FFCD05}"
+      TERMINAL_TITLE: "${TERMINAL_TITLE:-SNIPE BRIDGE}"
+      ORGANIZATION_NAME: "${ORGANIZATION_NAME:-Your organization}"
+      APP_LANGUAGE: "${APP_LANGUAGE:-en}"
+      LOGIN_DESCRIPTION_ENABLED: "${LOGIN_DESCRIPTION_ENABLED:-true}"
+      LOGIN_DESCRIPTION_PL: "${LOGIN_DESCRIPTION_PL:-Podłącz ręczny skaner kodów do Snipe-IT i przyśpiesz wydania oraz zwroty}"
+      LOGIN_DESCRIPTION_EN: "${LOGIN_DESCRIPTION_EN:-Connect a handheld barcode scanner to Snipe-IT and speed up checkouts and returns}"
+      SHOW_IDENTITY_CONFIG_WARNING: "${SHOW_IDENTITY_CONFIG_WARNING:-true}"
+      SNIPEIT_BASE_URL: "${SNIPEIT_BASE_URL}"
+      SNIPEIT_API_TOKEN: "${SNIPEIT_API_TOKEN}"
+      SNIPEIT_CUSTOM_FIELD: "${SNIPEIT_CUSTOM_FIELD:-}"
+      SNIPEIT_STATUS_CHECKOUT: "${SNIPEIT_STATUS_CHECKOUT:-Deployed}"
+      SNIPEIT_STATUS_READY: "${SNIPEIT_STATUS_READY:-Ready to Deploy}"
+      SNIPEIT_STATUS_SERVICE: "${SNIPEIT_STATUS_SERVICE:-Pending}"
+      IDENTITY_PROVIDER_TYPE: "${IDENTITY_PROVIDER_TYPE:-generic}"
+      IDENTITY_PROVIDER_NAME: "${IDENTITY_PROVIDER_NAME:-Identity Provider}"
+      OIDC_DISCOVERY_URL: "${OIDC_DISCOVERY_URL:-}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID:-}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-}"
+      OIDC_REDIRECT_URI: "${OIDC_REDIRECT_URI:-}"
+      IDENTITY_ALLOWED_DOMAINS: "${IDENTITY_ALLOWED_DOMAINS:-}"
+      OIDC_SCOPES: "${OIDC_SCOPES:-openid profile email}"
+      OIDC_EMAIL_CLAIM: "${OIDC_EMAIL_CLAIM:-email}"
+      OIDC_GROUPS_CLAIM: "${OIDC_GROUPS_CLAIM:-groups}"
+      OIDC_ADMIN_GROUPS: "${OIDC_ADMIN_GROUPS:-}"
+      ADMIN_EMAILS: "${ADMIN_EMAILS:-}"
+      TRUST_PROXY: "${TRUST_PROXY:-true}"
+      SESSION_COOKIE_SECURE: "${SESSION_COOKIE_SECURE:-true}"
+      REQUIRE_SECURE_CONFIG: "true"
+      ASSET_IMAGES_ENABLED: "${ASSET_IMAGES_ENABLED:-true}"
+      TERMINAL_SAFE_MODE: "${TERMINAL_SAFE_MODE:-false}"
+      QR_PAIR_TTL_MINUTES: "${QR_PAIR_TTL_MINUTES:-2}"
+      TERMINAL_IDLE_MINUTES: "${TERMINAL_IDLE_MINUTES:-15}"
+      DATABASE_PATH: "/data/bridge.db"
+      LOGO_PATH: "/data/branding/logo"
+    volumes:
+      - snipe_terminal_bridge_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  snipe_terminal_bridge_data:

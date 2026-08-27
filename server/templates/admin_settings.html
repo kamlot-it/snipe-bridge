@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Settings | {{ app_name }}{% endblock %}
+{% macro status_select(name, value) -%}
+<select name="{{ name }}" required>
+  {% if value and value not in status_names %}<option data-no-localize value="{{ value }}" selected>{{ value }} · unavailable</option>{% endif %}
+  {% for status in status_options %}<option data-no-localize value="{{ status.name }}"{% if status.name == value %} selected{% endif %}>{{ status.name }}{% if status.type %} · {{ status.type }}{% endif %}</option>{% endfor %}
+</select>
+{%- endmacro %}
+{% block content %}
+<section class="hero-row compact-hero">
+  <div><p class="eyebrow">Administration</p><h1>Application settings</h1><p>Branding, Snipe-IT, and identity provider settings are stored in the application data volume and applied immediately.</p></div>
+  <a class="secondary-button" href="{{ url_for('operator_panel') }}">Back to operator panel</a>
+</section>
+<form class="settings-grid" method="post" enctype="multipart/form-data" autocomplete="off">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <section class="card settings-card">
+    <p class="step">Branding</p><h2>Identity and language</h2>
+    <label>Application name<input name="app_name" value="{{ settings.app_name }}" maxlength="120" required></label>
+    <label>Short terminal title<input name="terminal_title" value="{{ settings.terminal_title }}" maxlength="32" required></label>
+    <label>Organization name<input name="organization_name" value="{{ settings.organization_name }}" maxlength="120" required></label>
+    <label>Interface language<select name="app_language"><option value="en"{% if settings.app_language == 'en' %} selected{% endif %}>English</option><option value="pl"{% if settings.app_language == 'pl' %} selected{% endif %}>Polski</option></select></label>
+    <label class="token-clear"><input type="checkbox" name="login_description_enabled" value="1"{% if settings.login_description_enabled == '1' %} checked{% endif %}> Show description on the sign-in page</label>
+    {% if app_language == 'pl' %}
+      <label>Opis na stronie logowania<textarea data-no-localize name="login_description_pl" maxlength="500" rows="3">{{ settings.login_description_pl }}</textarea></label>
+      <input data-no-localize type="hidden" name="login_description_en" value="{{ settings.login_description_en }}">
+    {% else %}
+      <label>Sign-in page description<textarea data-no-localize name="login_description_en" maxlength="500" rows="3">{{ settings.login_description_en }}</textarea></label>
+      <input data-no-localize type="hidden" name="login_description_pl" value="{{ settings.login_description_pl }}">
+    {% endif %}
+    <label>Logo (PNG, JPEG, GIF or WebP; max. 2 MB)<input type="file" name="logo" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+    <div class="color-settings">
+      <label><span class="color-label">Primary <span class="info-tip" tabindex="0" aria-label="Main color used for buttons, active controls, borders, and highlights.">i<span class="info-popup">Main color used for buttons, active controls, borders, and highlights.</span></span></span><input type="color" name="primary_color" value="{{ settings.primary_color }}"></label>
+      <label><span class="color-label">Header <span class="info-tip" tabindex="0" aria-label="Background color of the operator and terminal headers.">i<span class="info-popup">Background color of the operator and terminal headers.</span></span></span><input type="color" name="header_color" value="{{ settings.header_color }}"></label>
+    </div>
+  </section>
+
+  <section class="card settings-card">
+    <p class="step">Integration</p><h2>Snipe-IT</h2>
+    <label>Base URL<input type="url" name="snipeit_base_url" value="{{ settings.snipeit_base_url }}" placeholder="https://snipe.example.org" required></label>
+    <label>API token<input type="password" name="snipeit_api_token" value="{{ settings.snipeit_api_token }}" autocomplete="new-password"></label>
+    <label class="token-clear"><input type="checkbox" name="clear_snipeit_api_token" value="1"> Remove stored API token</label>
+    <label>Additional asset field<input name="snipeit_custom_field" value="{{ settings.snipeit_custom_field }}" placeholder="_snipeit_asset_tag_1"></label>
+    {% if status_sync_error %}<div class="notice notice-warning">Could not download Snipe-IT statuses: {{ status_sync_error }}. Current values remain available.</div>{% endif %}
+    <label>Checkout status{{ status_select('snipeit_status_checkout', settings.snipeit_status_checkout) }}</label>
+    <label>Ready status{{ status_select('snipeit_status_ready', settings.snipeit_status_ready) }}</label>
+    <label>Service status{{ status_select('snipeit_status_service', settings.snipeit_status_service) }}</label>
+    <button class="secondary-button" type="submit" formaction="{{ url_for('admin_refresh_statuses') }}" formmethod="post">Refresh status list</button>
+  </section>
+
+  <section class="card settings-card identity-settings-card">
+    <p class="step">Authentication</p><h2>Identity provider</h2>
+    <label>Provider<select id="identity-provider-type" name="identity_provider_type">{% for value, label in [('google','Google Workspace'),('microsoft','Microsoft Entra ID'),('keycloak','Keycloak'),('authentik','Authentik'),('okta','Okta'),('generic','Generic OpenID Connect')] %}<option value="{{ value }}"{% if settings.identity_provider_type == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Provider display name<input name="identity_provider_name" value="{{ settings.identity_provider_name }}" maxlength="120" placeholder="Company SSO"></label>
+    <label>OpenID Connect discovery URL<input id="oidc-discovery-url" type="url" name="oidc_discovery_url" value="{{ settings.oidc_discovery_url }}" placeholder="https://id.example.org/.well-known/openid-configuration"></label>
+    <label>Client ID<input name="oidc_client_id" value="{{ settings.oidc_client_id }}" autocomplete="off"></label>
+    <label>Client secret<input type="password" name="oidc_client_secret" value="{{ settings.oidc_client_secret }}" autocomplete="new-password"></label>
+    <label class="token-clear"><input type="checkbox" name="clear_oidc_client_secret" value="1"> Remove stored client secret</label>
+    <label class="token-clear"><input type="checkbox" name="show_identity_config_warning" value="1"{% if settings.show_identity_config_warning == '1' %} checked{% endif %}> Show the identity-provider configuration warning on the sign-in page</label>
+    <label>Redirect URL<span class="copy-row"><input id="oidc-redirect-uri" type="url" name="oidc_redirect_uri" value="{{ settings.oidc_redirect_uri }}" placeholder="{{ default_redirect_uri }}"><button class="small-button" id="copy-redirect" type="button">Copy</button></span></label>
+    <p class="field-help">Register <code>{{ settings.oidc_redirect_uri or default_redirect_uri }}</code> as an allowed callback URL at the provider.</p>
+    <label><span class="color-label">Allowed identity domain(s) <span class="info-tip" tabindex="0" aria-label="Optional application-side restriction based on the e-mail claim. Separate multiple domains with commas; leave blank to allow every domain.">i<span class="info-popup">Optional application-side restriction based on the e-mail claim. Separate multiple domains with commas; leave blank to allow every domain.</span></span></span><input name="identity_allowed_domains" value="{{ settings.identity_allowed_domains }}" placeholder="example.org, subsidiary.example.org"></label>
+    <label>OIDC scopes<input name="oidc_scopes" value="{{ settings.oidc_scopes }}" placeholder="openid profile email"></label>
+    <label>E-mail claim<input name="oidc_email_claim" value="{{ settings.oidc_email_claim }}" placeholder="email"></label>
+    <label>Groups claim<input name="oidc_groups_claim" value="{{ settings.oidc_groups_claim }}" placeholder="groups"></label>
+    <label><span class="color-label">Administrator groups <span class="info-tip" tabindex="0" aria-label="Members of these identity-provider groups receive administrator access. ADMIN_EMAILS and local administrator login remain supported.">i<span class="info-popup">Members of these identity-provider groups receive administrator access. ADMIN_EMAILS and local administrator login remain supported.</span></span></span><input name="oidc_admin_groups" value="{{ settings.oidc_admin_groups }}" placeholder="snipe-bridge-admins"></label>
+  </section>
+  <div class="settings-actions"><button class="primary-button" type="submit">Save settings</button></div>
+</form>
+<script>
+(function () {
+  var presets = {google: 'https://accounts.google.com/.well-known/openid-configuration', microsoft: 'https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration'};
+  var provider = document.getElementById('identity-provider-type');
+  var discovery = document.getElementById('oidc-discovery-url');
+  provider.onchange = function () { if (presets[provider.value] && (!discovery.value || discovery.value.indexOf('/.well-known/openid-configuration') !== -1)) { discovery.value = presets[provider.value]; } };
+  document.getElementById('copy-redirect').onclick = function () {
+    var input = document.getElementById('oidc-redirect-uri'); var value = input.value || input.placeholder;
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(value); } else { input.value = value; input.select(); document.execCommand('copy'); }
+  };
+}());
+</script>
+{% endblock %}

@@ -1,0 +1,79 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="{{ app_language }}">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="MobileOptimized" content="320">
+  <meta name="HandheldFriendly" content="true">
+  <meta name="viewport" content="width=320, initial-scale=1.0">
+  <title>Diagnostyka terminala</title>
+  <style type="text/css">
+    html, body { width: 320px; max-width: 320px; margin: 0; padding: 0; overflow-x: hidden; background: #fff; color: #171717; font-family: Arial, Helvetica, sans-serif; }
+    .head { width: 310px; padding: 8px 5px; border-bottom: 3px solid #FFCD05; background: #292929; color: #FFCD05; font-size: 14px; text-align: center; }
+    .panel { width: 286px; margin: 7px 8px; border: 1px solid #555; padding: 7px; overflow: hidden; }
+    h1 { margin: 0 0 6px; color: #a43a32; font-size: 18px; }
+    p { margin: 4px 0; font-size: 11px; line-height: 14px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
+    td { padding: 4px 2px; border-bottom: 1px solid #ccc; overflow: hidden; word-wrap: break-word; }
+    td:first-child { width: 40%; color: #555; }
+    .ruler { height: 15px; margin: 4px 0; border-left: 2px solid #FFCD05; border-right: 2px solid #FFCD05; background: #f2d2bd; color: #111; font-size: 9px; line-height: 15px; text-align: center; }
+    .r286 { width: 256px; }
+    .r304 { width: 272px; }
+    .r320 { width: 282px; border-right-color: #b42318; }
+    .button { display: block; width: 278px; height: 38px; margin: 7px auto 0; border: 2px solid #FFCD05; padding: 0; background: #FFCD05; color: #111; font-size: 13px; font-weight: bold; text-align: center; }
+    .back { display: block; width: 282px; margin: 6px auto; padding: 8px 0; border: 1px solid #555; color: #111; font-size: 11px; font-weight: bold; text-align: center; text-decoration: none; }
+    .ok { margin: 5px 0; padding: 5px; background: #d7f0df; color: #125b36; font-size: 11px; text-align: center; }
+    .foot { width: 312px; padding: 4px; color: #666; font-size: 9px; text-align: center; }
+  </style>
+</head>
+<body onload="collectDiagnostics()">
+  <div class="head"><b>DIAGNOSTYKA TERMINALA</b></div>
+  <div class="panel">
+    <h1>Rozmiar i profil</h1>
+    {% if saved %}<div class="ok">Zapisano wynik w dzienniku operacji.</div>{% endif %}
+    <table cellspacing="0" cellpadding="0">
+      <tr><td>Ekran</td><td id="screen-value">—</td></tr>
+      <tr><td>Viewport</td><td id="viewport-value">—</td></tr>
+      <tr><td>Body</td><td id="body-value">—</td></tr>
+      <tr><td>Scroll</td><td id="scroll-value">—</td></tr>
+      <tr><td>Profil</td><td>{{ profile }}</td></tr>
+      <tr><td>Build</td><td>v{{ bridge_version }}</td></tr>
+    </table>
+    <p>Linie kontrolne:</p>
+    <div class="ruler r286">286 px</div>
+    <div class="ruler r304">304 px</div>
+    <div class="ruler r320">320 px — krawędź ekranu</div>
+    <form method="post" action="{{ url_for('terminal_diagnostics') }}?t={{ terminal_id }}" onsubmit="return collectDiagnostics()">
+      <input id="diag-screen" type="hidden" name="screen" value="">
+      <input id="diag-viewport" type="hidden" name="viewport" value="">
+      <input id="diag-body" type="hidden" name="body" value="">
+      <input id="diag-scroll" type="hidden" name="scroll" value="">
+      <input id="diag-user-agent" type="hidden" name="user_agent" value="">
+      <input type="hidden" name="profile" value="{{ profile }}">
+      <input class="button" type="submit" value="ZAPISZ WYNIK">
+    </form>
+    <a class="back" href="{{ url_for('terminal') }}?t={{ terminal_id }}">WRÓĆ DO TERMINALA</a>
+  </div>
+  <div class="foot">ID {{ terminal_id }} · v{{ bridge_version }}</div>
+  <script type="text/javascript">
+    function dimensions(width, height) {
+      return String(width || 0) + ' x ' + String(height || 0);
+    }
+    function setDiagnosticValue(displayId, inputId, value) {
+      var display = document.getElementById(displayId);
+      var input = document.getElementById(inputId);
+      if (display) { display.innerHTML = value; }
+      if (input) { input.value = value; }
+    }
+    function collectDiagnostics() {
+      var root = document.documentElement || {};
+      var body = document.body || {};
+      setDiagnosticValue('screen-value', 'diag-screen', dimensions(screen.width, screen.height));
+      setDiagnosticValue('viewport-value', 'diag-viewport', dimensions(root.clientWidth || body.clientWidth, root.clientHeight || body.clientHeight));
+      setDiagnosticValue('body-value', 'diag-body', dimensions(body.clientWidth, body.clientHeight));
+      setDiagnosticValue('scroll-value', 'diag-scroll', dimensions(body.scrollWidth, body.scrollHeight));
+      document.getElementById('diag-user-agent').value = String(navigator.userAgent || '');
+      return true;
+    }
+  </script>
+</body>
+</html>

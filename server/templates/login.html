@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Sign in | {{ app_name }}{% endblock %}
+{% block content %}
+<div class="login-grid">
+  <section class="intro-card">
+    <div class="language-switch" aria-label="Language"><a{% if app_language == 'pl' %} class="active"{% endif %} href="{{ url_for('set_language', language='pl', next=request.path) }}">PL</a><a{% if app_language == 'en' %} class="active"{% endif %} href="{{ url_for('set_language', language='en', next=request.path) }}">EN</a></div>
+    <p class="eyebrow">{{ organization_name }}</p>
+    <h1>{{ app_name }}</h1>
+    {% if login_description_enabled and login_description %}<p><span data-no-localize>{{ login_description }}</span></p>{% endif %}
+  </section>
+  <section class="card login-card">
+    <p class="step">Operator access</p>
+    <h2>{{ tr('login_title') }}</h2>
+    {% if identity_enabled %}
+      <a class="google-button" href="{{ url_for('identity_login') }}"><span class="google-g">↗</span>Sign in with {{ identity_provider_name }}</a>
+      {% if identity_allowed_domains %}<p class="login-help">Only verified accounts from {% for domain in identity_allowed_domains %}@{{ domain }}{% if not loop.last %}, {% endif %}{% endfor %} that also exist in Snipe-IT are accepted.</p>{% else %}<p class="login-help">The account e-mail must match an active user in Snipe-IT.</p>{% endif %}
+    {% elif show_identity_config_warning %}
+      <div class="notice notice-error">Identity-provider sign-in requires a discovery URL, Client ID, and Client Secret.</div>
+    {% endif %}
+    <details class="pin-fallback"{% if not identity_enabled %} open{% endif %}>
+      <summary>{{ tr('admin_login') }}</summary>
+      <form method="post" class="stack-form" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="username">{{ tr('username') }}</label>
+        <input id="username" name="username" autocomplete="username" required>
+        <label for="password">{{ tr('password') }}</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button class="secondary-button" type="submit">{{ tr('sign_in') }}</button>
+      </form>
+    </details>
+  </section>
+</div>
+{% endblock %}
