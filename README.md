@@ -27,9 +27,6 @@ Snipe Bridge lets modern operator browsers control asset checkout and return wor
 
 ![Snipe Bridge operator panel](docs/images/operator.png)
 
-> [!IMPORTANT]
-> `1.0.0-rc14` is a clean open-source release based on the proven `0.8.4` proof of concept. It does not import terminal sessions, audit entries, credentials, or organization-specific branding from an existing deployment.
-
 ## Why Snipe Bridge?
 
 | Problem | Snipe Bridge approach |
