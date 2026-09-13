@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -499,6 +500,51 @@ def test_operator_pairing_status_unlocks_operation_selection(client, app):
     assert status.json["status"] == "paired"
     panel = client.get("/").get_data(as_text=True)
     assert "Choose operation" in panel
+
+
+def test_pairing_qr_image_is_valid_svg_and_expires_after_claim(client, app):
+    admin_login(client)
+    with client.session_transaction() as session:
+        token = session["pending_pair_token"]
+    response = client.get("/operator/pairing-qr/image", query_string={"token": token})
+    assert response.status_code == 200
+    assert response.mimetype == "image/svg+xml"
+    root = ET.fromstring(response.data)
+    assert root.tag == "{http://www.w3.org/2000/svg}svg"
+    assert root.findall(".//{http://www.w3.org/2000/svg}rect")
+    assert response.headers["Cache-Control"] == "no-store"
+    terminal = app.extensions["store"].create_terminal()
+    assert app.extensions["store"].claim_pair_request(token, terminal["terminal_id"])
+    expired = client.get("/operator/pairing-qr/image", query_string={"token": token})
+    assert expired.status_code in (404, 410)
+
+
+@pytest.mark.parametrize("source_format", ["PNG", "JPEG"])
+def test_terminal_image_is_scaled_jpeg_with_white_margins(client, app, monkeypatch, source_format):
+    source = Image.new("RGBA" if source_format == "PNG" else "RGB", (160, 80), "red")
+    if source_format == "PNG":
+        source.putpixel((0, 0), (0, 0, 0, 0))
+    payload = io.BytesIO()
+    source.save(payload, source_format)
+    snipe = app.extensions["snipe"]
+    monkeypatch.setattr(snipe, "asset_image_url", lambda asset: "https://example.invalid/image", raising=False)
+    monkeypatch.setattr(snipe, "fetch_asset_image", lambda asset: payload.getvalue(), raising=False)
+    store = app.extensions["store"]
+    terminal = store.create_terminal()
+    terminal_id = terminal["terminal_id"]
+    client.set_cookie("stb_terminal_" + terminal_id.replace("-", ""), terminal["_access_token"])
+    store.set_pending(terminal_id, {"id": 64}, "TEST-64", ["Asset Tag"], None)
+    response = client.get("/terminal/image", query_string={"t": terminal_id, "asset": 64})
+    assert response.status_code == 200
+    assert response.mimetype == "image/jpeg"
+    with Image.open(io.BytesIO(response.data)) as result:
+        result.load()
+        assert result.format == "JPEG"
+        assert result.size == (78, 72)
+        assert result.mode == "RGB"
+        assert all(channel >= 240 for channel in result.getpixel((39, 2)))
+        red, green, blue = result.getpixel((39, 36))
+        assert red > 200 and green < 30 and blue < 30
 
 
 def test_dynamic_server_messages_are_localized_as_complete_phrases():
