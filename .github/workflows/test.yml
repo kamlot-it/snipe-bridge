@@ -3,6 +3,7 @@ name: Test
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -10,12 +11,94 @@ permissions:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
           cache: pip
       - run: pip install -r requirements-dev.txt
+      - run: pip check
       - run: pytest
-      - run: docker build -t snipe-terminal-bridge:test .
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and load test image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: PYTHON_VERSION=${{ matrix.python }}-slim
+          load: true
+          push: false
+          tags: snipe-terminal-bridge:test
+      - name: Start production command and check HTTP endpoints
+        env:
+          TEST_PLATFORM: linux/${{ matrix.arch }}
+        run: |
+          docker run -d --name bridge-smoke --platform "$TEST_PLATFORM" \
+            -p 127.0.0.1:8080:8080 \
+            -e SECRET_KEY=ci-only-not-a-production-secret \
+            -e ADMIN_PASSWORD=ci-only-not-a-production-password \
+            -e SNIPEIT_BASE_URL=https://snipe.example.invalid \
+            -e SNIPEIT_API_TOKEN=ci-only-test-token \
+            -e READINESS_CHECK_SNIPEIT=false \
+            -e DATABASE_BACKUP_INTERVAL_HOURS=0 \
+            -e APP_LANGUAGE=en \
+            snipe-terminal-bridge:test
+          python3 scripts/smoke_http.py http://127.0.0.1:8080
+      - name: Container logs
+        if: always()
+        run: docker logs bridge-smoke 2>&1 || true
+      - name: Remove test container
+        if: always()
+        run: docker rm -f bridge-smoke || true
+
+  release-tags:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        include:
+          - version: 1.0.0-rc14
+            expected: '["snipe-bridge-ci:1.0.0-rc14"]'
+          - version: 1.0.0
+            expected: '["snipe-bridge-ci:1.0.0", "snipe-bridge-ci:1.0", "snipe-bridge-ci:latest"]'
+    steps:
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: snipe-bridge-ci
+          tags: |
+            type=semver,pattern={{version}},value=${{ matrix.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ matrix.version }}
+      - name: Check stable and pre-release tags
+        env:
+          ACTUAL_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_TAGS: ${{ matrix.expected }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          actual = set(os.environ["ACTUAL_TAGS"].splitlines())
+          expected = set(json.loads(os.environ["EXPECTED_TAGS"]))
+          assert actual == expected, (actual, expected)
+          print("Release tags verified:", sorted(actual))
+          PY

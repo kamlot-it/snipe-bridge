@@ -71,6 +71,31 @@ Test changes in both a current browser and the actual legacy device whenever pos
 
 ## Docker verification
 
+The `Test` workflow runs the suite on Python 3.12 and 3.14. It also builds
+and starts the production Gunicorn command on both `linux/amd64` and
+`linux/arm64` for each Python version. HTTP checks cover health, storage
+readiness, login and the terminal pairing page. Snipe-IT is not contacted;
+these checks use disposable CI credentials and a fresh container database.
+
+The workflow checks release tag generation using both a stable and an RC
+version. Test images are loaded locally on the runner and are not published.
+The default production image remains Python 3.12. To test another version:
+
+```bash
+docker build --build-arg PYTHON_VERSION=3.14-slim -t snipe-bridge:test .
+```
+
+After starting a test container as below, check it from a second terminal:
+
+```bash
+python3 scripts/smoke_http.py http://127.0.0.1:8080
+```
+
+Image regression tests check QR SVG generation and PNG/JPEG conversion for
+terminal thumbnails. They do not verify QR readability on a physical scanner.
+Before releasing dependency updates, also check a complete scan and confirmation
+on the handheld, plus authentication through the deployment's reverse proxy.
+
 ```bash
 docker build -t snipe-bridge:test .
 docker run --rm -p 8080:8080 \
