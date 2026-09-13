@@ -1,6 +1,7 @@
 """Check a running Gunicorn container using disposable CI configuration."""
 
 import http.cookiejar
+import http.client
 import json
 import sys
 import time
@@ -21,7 +22,7 @@ def main():
             assert health["status"] == "ok"
             assert health["version"]
             break
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(1)
